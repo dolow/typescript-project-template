@@ -1,0 +1,10 @@
+{
+  "scripts" : {
+    "test:lint" : "tslint -p tsconfig.json --format stylish 'src/**/*.ts*'"
+  },
+  "dependencies" : {
+  },
+  "devDependencies" : {
+    "tslint": "^5.9.1"
+  }
+}

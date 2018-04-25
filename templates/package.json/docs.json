@@ -1,0 +1,10 @@
+{
+  "scripts" : {
+    "build:doc" : "typedoc 'src/'"
+  },
+  "dependencies" : {
+  },
+  "devDependencies" : {
+    "typedoc": "^0.11.1"
+  }
+}

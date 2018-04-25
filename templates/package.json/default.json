@@ -1,0 +1,15 @@
+{
+  "scripts" : {
+    "build:dev"      : "webpack --mode development",
+    "build:prod"     : "webpack --mode production",
+    "workflow:build" : "npm run build:dev && npm run build:prod"
+  },
+  "dependencies" : {
+  },
+  "devDependencies" : {
+    "ts-loader": "^4.2.0",
+    "typescript": "^2.8.1",
+    "webpack": "^4.5.0",
+    "webpack-cli": "^2.0.14"
+  }
+}
