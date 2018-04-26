@@ -1,17 +1,18 @@
 /**
  * module requirements
  */
-const fs        = require('fs');
-const path      = require('path');
-const commander = require('commander');
-const project   = require('./package.json');
+const fs            = require('fs');
+const path          = require('path');
+const child_process = require('child_process');
+const commander     = require('commander');
+const project       = require('./package.json');
 
 /**
  * shared variables
  */
-const WORK_DIR     = process.cwd();
 const SCRIPT_DIR   = __dirname;
 const TEMPLATE_DIR = path.join(SCRIPT_DIR, 'templates');
+const NPM_COMMAND  = 'npm';
 
 /**
  * CLI arguments
@@ -37,14 +38,14 @@ ParseArgs : {
 /**
  * main
  */
-(function(){
-  function loadTemplate(path, toJson) {
-    let content = fs.fileReadSync(path);
+const main = (function(){
+  const loadTemplate = function(path, toJson) {
+    let content = fs.readFileSync(path).toString();
     content = content.replace(/::PROJECT_NAME::/g, commander.projectName);
     return (toJson) ? JSON.parse(content) : content;
   }
 
-  function applyTemplate(defaultTemplatePath, destination, optionalTemplatePaths = []) {
+  const applyTemplate = function(defaultTemplatePath, destination, optionalTemplatePaths = []) {
     const isJson = (path.extname(defaultTemplatePath) === '.json');
     const template = loadTemplate(defaultTemplatePath, isJson);
 
@@ -55,53 +56,66 @@ ParseArgs : {
       }
     }
 
-    fs.writeFileSync(destination, (isJson) ? JSON.stringify(jsonObj, null, 2) : template);
+    fs.writeFileSync(destination, (isJson) ? JSON.stringify(template, null, 2) : template);
   }
 
-  function run() {
+  const run = function() {
     if (!fs.existsSync(commander.destination)) {
+      console.log('creating destination directory', commander.destination);
       fs.mkdirSync(commander.destination);
     }
 
+    console.log('changing working directory', commander.destination);
     process.chdir(commander.destination);
 
-    commander.command('npm init -y');
+    InitProject : {
+      console.log('initializing npm project');
+      child_process.execSync(`${NPM_COMMAND} init -y`);
+    }
 
     MergeTemplates : {
       PackageJson : {
         const defaultTemplatePath = path.join(TEMPLATE_DIR, 'package.json', 'default.json');
         const defaultTemplate     = loadTemplate(defaultTemplatePath, true);
+        const templateKeys        = Object.keys(defaultTemplate);
 
-        const variants = [];
-        if (!commander.noTest) variants.push('test');
-        if (!commander.noLint) variants.push('lint');
-        if (!commander.noDocs) variants.push('docs');
+        Load : {
+          const variants = [];
+          if (!commander.noTest) variants.push('test');
+          if (!commander.noLint) variants.push('lint');
+          if (!commander.noDocs) variants.push('docs');
 
-        const templateKeys = Object.keys(defaultTemplate);
+          for (let i = 0; i < variants.length; i++) {
+            const variant = variants[i];
 
-        for (let i = 0; i < variants.length; i++) {
-          const variant = variants[i];
+            const templatePath = path.join(TEMPLATE_DIR, 'package.json', `${variants[i]}.json`);
+            const template = loadTemplate(templatePath, true);
 
-          const templatePath = path.join(TEMPLATE_DIR, 'package.json', `${variants[i]}.json`);
-          const template = loadTemplate(templatePath, true);
-
-          for (let j = 0; j < templateKeys.length; j++) {
-            const key = templateKeys[j];
-            Object.assign(defaultTemplate[key], template[key]);
+            for (let j = 0; j < templateKeys.length; j++) {
+              const key = templateKeys[j];
+              Object.assign(defaultTemplate[key], template[key]);
+            }
           }
         }
 
         const packageJsonPath = path.join(commander.destination, 'package.json');
         const packageJson     = loadTemplate(packageJsonPath, true);
 
-        for (let i = 0; i < templateKeys.length; i++) {
-          Object.assign(packageJson[key], defaultTemplate[key]);
+        Merge : {
+          for (let i = 0; i < templateKeys.length; i++) {
+            const key = templateKeys[i];
+            if (!packageJson[key]) packageJson[key] = {};
+            Object.assign(packageJson[key], defaultTemplate[key]);
+          }
         }
 
-        jsonObj.name = commander.projectName;
-        jsonObj.main = "lib/index.js";
+        Default : {
+          packageJson.name = commander.projectName;
+          packageJson.main = "lib/index.js";
+        }
 
-        fs.writeFileSync(packageJsonPath, JSON.stringify(jsonObj, null, 2));
+        console.log('merging package.json templates');
+        fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
       }
 
       TsConfig : {
@@ -110,6 +124,7 @@ ParseArgs : {
           optionalTemplates.push(path.join(TEMPLATE_DIR, 'tsconfig.json', 'docs.json'));
         }
 
+        console.log('merging tsconfig.json template');
         applyTemplate(
           path.join(TEMPLATE_DIR, 'tsconfig.json', 'default.json'),
           path.join(commander.destination, 'tsconfig.json'),
@@ -118,6 +133,7 @@ ParseArgs : {
       }
 
       WebPack : {
+        console.log('merging webpack.config.js template');
         applyTemplate(
           path.join(TEMPLATE_DIR, 'webpack.config.js', 'default.js'),
           path.join(commander.destination, 'webpack.config.js')
@@ -125,6 +141,11 @@ ParseArgs : {
       }
 
       Src : {
+        const srcDir = path.join(commander.destination, 'src');
+        console.log('creating src directory');
+        fs.mkdirSync(srcDir);
+
+        console.log('deploying default entry point');
         applyTemplate(
           path.join(TEMPLATE_DIR, 'src', 'default.ts'),
           path.join(commander.destination, 'src', 'index.ts')
@@ -134,38 +155,68 @@ ParseArgs : {
       Tests : if (!commander.noTest) {
         Unit : {
           const testDir = path.join(commander.destination, 'test');
+          console.log('creating test directory');
           fs.mkdirSync(testDir);
 
+          console.log('deploying default unit test script');
           applyTemplate(
             path.join(TEMPLATE_DIR, 'test', 'index.js'),
             path.join(testDir, 'index.js')
           );
         }
         Karma : {
+          console.log('deploying default karma.conf.js');
           applyTemplate(
             path.join(TEMPLATE_DIR, 'karma.conf.js', 'default.js'),
             path.join(commander.destination, 'karma.conf.js')
           );
         }
+        Lint : {
+          console.log('deploying default tslint.json');
+          const defaultTemplatePath = path.join(TEMPLATE_DIR, 'tslint.json', 'default.json');
+          const defaultTemplate = loadTemplate(defaultTemplatePath, true);
+          if (commander.lintRule) {
+            console.log(`adding desired lint extension : ${commander.lintRule}`);
+            defaultTemplate.excludes.push(commander.lintRule);
+          }
+
+          console.log('deploying tslint.json templates');
+          const destDir = path.join(commander.destination, 'tslint.json');
+          fs.writeFileSync(destDir, JSON.stringify(defaultTemplate, null, 2));
+        }
       }
     }
 
     Install : if (!commander.skipInstall) {
-      commander.command('npm i');
-    }
+      console.log('installing node_modules');
+      child_process.execSync(`${NPM_COMMAND} install`);
 
-    TestRun : if (!commander.skipValidation) {
-      commander.command('npm run workflow:build');
+      if (commander.lintRule) {
+        console.log(`installing desired lint extension : ${commander.lintRule}`);
+        child_process.execSync(`${NPM_COMMAND} install ${commander.lintRule} --save-dev`);
+      }
 
-      if (!commander.noTest) {
-        commander.command('npm run test:unit');
-      }
-      if (!commander.noLint) {
-        commander.command('npm run test:lint');
-      }
-      if (!commander.noDocs) {
-        commander.command('npm run build:docs');
+      TestRun : if (!commander.skipValidation) {
+        console.log('validating webpack build');
+        child_process.execSync(`${NPM_COMMAND} run workflow:build`);
+
+        if (!commander.noTest) {
+          console.log('validating unit test');
+          child_process.execSync(`${NPM_COMMAND} run test:unit`);
+        }
+        if (!commander.noLint) {
+          console.log('validating lint');
+          child_process.execSync(`${NPM_COMMAND} run test:lint`);
+        }
+        if (!commander.noDocs) {
+          console.log('validating docs');
+          child_process.execSync(`${NPM_COMMAND} run build:docs`);
+        }
       }
     }
   }
-})();
+
+  return run;
+}());
+
+main();

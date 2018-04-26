@@ -1,6 +1,6 @@
 {
   "scripts" : {
-    "build:doc" : "typedoc 'src/'"
+    "build:docs" : "typedoc 'src/'"
   },
   "dependencies" : {
   },

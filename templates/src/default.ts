@@ -1,1 +1,1 @@
-cosole.log('Hello ::PROJECT_NAME:: !');
+console.log('Hello ::PROJECT_NAME:: !');
