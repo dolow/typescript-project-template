@@ -21,8 +21,8 @@ ParseArgs : {
   commander
     .version(project.version)
     .option('-n, --project-name [name]', 'project name',                  'my-typescript-project')
-    .option('-d, --destination [dest]',  'project destination directory', process.cwd())
-    .option('--lint-rule',               'base lint rule',                'tslint-config-airbnb')
+    .option('-d, --destination [dest]',  'project destination directory')
+    .option('--lint-rule [rule]',        'base lint rule',                'tslint-config-airbnb')
     .option('--no-test',                 'exclude unit test')
     .option('--no-lint',                 'exclude tslint')
     .option('--no-docs',                 'exclude typedoc')
@@ -30,6 +30,9 @@ ParseArgs : {
     .option('--skip-validation',         'skip generated project validation')
     .parse(process.argv);
 
+  if (!commander.destination) {
+    commander.destination = path.join(process.cwd(), commander.projectName);
+  }
   if (!path.isAbsolute(commander.destination)) {
     commander.destination = path.join(process.cwd(), commander.destination);
   }
@@ -176,8 +179,8 @@ const main = (function(){
           const defaultTemplatePath = path.join(TEMPLATE_DIR, 'tslint.json', 'default.json');
           const defaultTemplate = loadTemplate(defaultTemplatePath, true);
           if (commander.lintRule) {
-            console.log(`adding desired lint extension : ${commander.lintRule}`);
-            defaultTemplate.excludes.push(commander.lintRule);
+            console.log(`setting base lint rule : ${commander.lintRule}`);
+            defaultTemplate.extends.push(commander.lintRule);
           }
 
           console.log('deploying tslint.json templates');
